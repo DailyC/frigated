@@ -26,3 +26,14 @@ type FLogger struct {
 	// 把 stderr 重定向到 stdout，默认 false,错误日志也会写进Stdout中
 	Redirect bool
 }
+
+// 基于标准输出流，构造一个日志控制器
+func DefaultLogger() *FLogger {
+	return &FLogger{
+		Stdout:   os.Stdout,
+		Stderr:   os.Stderr,
+		Backups:  0,
+		Maxbytes: 0,
+		Redirect: false,
+	}
+}
