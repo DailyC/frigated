@@ -1,23 +1,12 @@
 package frigate
 
 import (
-	"github.com/docker/docker/pkg/reexec"
 	"github.com/frigated/pkgs/cgroup"
 	"github.com/frigated/pkgs/logger"
-	"os"
 )
 
 //@author Wang Weiwei
 //@since 2020/3/24
-type Frigate struct {
-	// config of task logger
-	Log *logger.FLogger
-	// control groups of resources，it only use on linux
-	ControlGroups []*cgroup.ControlGroup
-
-	ProtectTask *ProtectTask
-	Strategy    *Strategy
-}
 
 // 创建守护的任务进程
 //
@@ -36,6 +25,17 @@ func Create(name string) *Frigate {
 	}
 }
 
-func Protect() {
+type Frigate struct {
+	// config of task logger
+	Log *logger.FLogger
+	// control groups of resources，it only use on linux
+	ControlGroups []*cgroup.ControlGroup
+
+	ProtectTask *ProtectTask
+	Strategy    *Strategy
+}
+
+// 启动守护进程
+func (frigate *Frigate) Start() {
 
 }

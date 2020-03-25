@@ -38,3 +38,7 @@ const (
 	// 不自动重启
 	FALSE = "false"
 )
+
+func defaultStratage() *Strategy {
+
+}

@@ -11,6 +11,7 @@ import (
 
 //@author Wang Weiwei
 //@since 2020/3/24
+// 历史注册过的golang函数
 var registeredInitializers = make(map[string]func())
 
 // 受保护任务定义
