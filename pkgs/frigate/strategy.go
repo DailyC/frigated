@@ -1,9 +1,27 @@
 package frigate
 
 import (
+	"os"
+	"os/exec"
 	"os/user"
+	"syscall"
 	"time"
 )
+
+var pid int = 0
+var pgid int = 0
+var currentUser *user.User
+
+func init() {
+	pid = os.Getpid()
+	pgid, _ = syscall.Getpgid(syscall.Getpid())
+	u, err := user.Current()
+	if err != nil {
+		panic(err)
+	}
+	currentUser = u
+
+}
 
 //@author Wang Weiwei
 //@since 2020/3/24
@@ -21,13 +39,14 @@ type Strategy struct {
 	GraceClose bool
 	// 关闭同名进程最大等待时间
 	GraceCloseWait time.Duration
-	// frigated 被时，是否强杀掉该进程
+	// frigated 被关闭时，是否强杀掉该进程
 	Kill bool
 	// 启动用户
 	User *user.User
+	// chroot
+	Chroot string
 }
 
-// 程序自动重启策略
 type AutoRestartStrategy string
 
 const (
@@ -41,4 +60,33 @@ const (
 
 func defaultStratage() *Strategy {
 
+}
+
+/**
+ * 在创建子进程时使用守护策略
+ * 在创建进程时，子进程默认属于守护进程相同的进程组
+ * 子进程默认与父进程是相同用户
+ */
+func (s *Strategy) Apply(cmd *exec.Cmd) (err error) {
+	cmd.SysProcAttr = &syscall.SysProcAttr{}
+	cmd.SysProcAttr.Setpgid = true
+	cmd.SysProcAttr.Pgid = pgid
+	if s.User != nil {
+		// 重新查找正确的用户
+		if s.User.Uid != ""{
+			s.User, err = user.LookupId(s.User.Uid)
+			if err != nil {
+				return err
+			}
+		}else if s.User.Name != "" {
+			s.User, err = user.Lookup(s.User.Name)
+			if err != nil {
+				return err
+			}
+		} 
+		// todo 如果没有找到用户，且守护进程有root权限，则应创建相关用户
+		
+		cmd.SysProcAttr.Credential = &syscall.Credential{}
+	
+	}
 }

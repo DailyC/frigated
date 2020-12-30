@@ -15,4 +15,5 @@ func createWrite() {
 		MaxAge:     3,      // 文件最多保存多少天
 		Compress:   true,   // 是否压缩
 	}
+	
 }

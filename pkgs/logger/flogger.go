@@ -1,6 +1,9 @@
 package logger
 
-import "os"
+import (
+	"os"
+	"os/exec"
+)
 
 //@author Wang Weiwei
 //@since 2020/3/24
@@ -36,4 +39,14 @@ func DefaultLogger() *FLogger {
 		Maxbytes: 0,
 		Redirect: false,
 	}
+}
+
+/**
+ * 应用logger配置，包括重定向输出流及启用文件清理相关功能
+ */
+func (f *FLogger)Apply(cmd *exec.Cmd) error {
+		cmd.Stdin = nil
+		cmd.Stdout = f.Stdout
+		cmd.Stderr = f.Stderr
+		return nil
 }

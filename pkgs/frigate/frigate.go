@@ -1,6 +1,9 @@
 package frigate
 
 import (
+	"errors"
+	"os/exec"
+
 	"github.com/frigated/pkgs/cgroup"
 	"github.com/frigated/pkgs/logger"
 )
@@ -35,7 +38,41 @@ type Frigate struct {
 	Strategy    *Strategy
 }
 
-// 启动守护进程
-func (frigate *Frigate) Start() {
+/**
+ * 应用配置接口
+ * 主要用于讲配置数据应用于cmd
+ */
+type ApplyConfig interface {
+	/**
+	 * 应用配置
+	 * return: 0 成功
+	 * 			其它失败
+	 */
+	Apply(cmd *exec.Cmd) error
+}
 
+/**
+ * 应用子进程配置
+ */
+func (frigate *Frigate) Apply(cmd *exec.Cmd) (err error) {
+	err = frigate.Log.Apply(cmd)
+	if err != nil {
+		return err
+	}
+	err = frigate.Strategy.Apply(frigate.ProtectTask.Cmd)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// 启动守护进程
+// 启动守护进程时会使用守护策略参数
+func (frigate *Frigate) Start() error {
+	if frigate.ProtectTask != nil && frigate.ProtectTask.Cmd != nil {
+		return frigate.Apply(frigate.ProtectTask.Cmd)
+	} else {
+		// no args
+		return errors.New("no init command")
+	}
 }

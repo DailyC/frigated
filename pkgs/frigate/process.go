@@ -79,12 +79,12 @@ func newExecTask(path string) *ProtectTask {
 			if runtime.GOOS == "windows" {
 				return exec.Command(path)
 			} else {
-				return exec.Command("/bin/sh", "-c", path)
+				return exec.Command(path)
 			}
 		}(),
 		Name:      paths[len(path)-1],
 		Process:   nil,
-		StartTime: nil,
+		StartTime: time.Now(),
 	}
 }
 
@@ -97,6 +97,6 @@ func newGolangTask(name string) *ProtectTask {
 		Cmd:       reexec.Command(name),
 		Name:      name,
 		Process:   nil,
-		StartTime: nil,
+		StartTime: time.Now(),
 	}
 }
