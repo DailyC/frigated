@@ -117,3 +117,13 @@ func (s *Strategy) Apply(cmd *exec.Cmd) (err error) {
 	}
 	return nil
 }
+
+
+/**
+ * 测试策略性的重启
+ * 如程序异常结束，则应允许应用重启
+ * 而当应用连续尝试启动失败后，不应该一直重启，因为这会造成一直浪费资源，且无法正常启动
+*/
+func (strategy *Strategy)tryRestart(t time.Time) bool {
+
+}

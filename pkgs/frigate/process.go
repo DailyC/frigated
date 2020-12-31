@@ -16,6 +16,7 @@ var registeredInitializers = make(map[string]func())
 
 const (
 	CANCEL_PROCESS string = "cancel"
+	COMPLETE_PROCESS string = "complete"
 )
 // 受保护任务定义
 type ProtectTask struct {
@@ -24,8 +25,10 @@ type ProtectTask struct {
 	Name      string
 	Process   *os.Process
 	StartTime time.Time
-	// 任务相关信号
+	// 任务相关信号管道
 	signalChan chan error
+	// 信号管道是否被正常关闭
+	isCloseSC bool
 }
 
 
@@ -93,6 +96,7 @@ func newExecTask(path string) *ProtectTask {
 		Process:   nil,
 		StartTime: time.Now(),
 		signalChan: make(chan error, 1),
+		isCloseSC: false,
 	}
 }
 
@@ -106,6 +110,8 @@ func newGolangTask(name string) *ProtectTask {
 		Name:      name,
 		Process:   nil,
 		StartTime: time.Now(),
+		signalChan: make(chan error, 1),
+		isCloseSC: false,
 	}
 }
 
@@ -118,8 +124,36 @@ func (t *ProtectTask) Done() <-chan error{
 
 
 /**
+ * close the channel od signal
+*/
+func (t *ProtectTask) closeSC(f func ()) {
+	if !t.isCloseSC {
+		f()
+		close(t.signalChan)
+		t.isCloseSC = true
+	}
+}
+
+/**
  * 启动进程
+ * 启动进程后，需要主动wait，等待子进程结束，接收SINGCHILD信号，否则子进程可能变成僵尸进程
 */
 func (t *ProtectTask) Start() (err error) {
-
+	t.StartTime = time.Now()
+	err = t.Cmd.Start()
+	if err != nil {
+		return err
+	}
+	
+	t.Process = t.Cmd.Process
+	go func() {
+		err = t.Cmd.Wait()
+		t.closeSC(func () {
+			if err == nil {
+				signalChan <- errors.New(COMPLETE_PROCESS)
+			}else {
+				signalChan <- err
+			}
+		})
+	}
 }

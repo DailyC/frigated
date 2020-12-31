@@ -85,8 +85,8 @@ func (frigate *Frigate) Start() (err error) {
 		 if err != nil {
 			 return err
 		 }
-		 
-		frigate.Log.Stderr.Write(byte[](fmt.Sprintf("[DEBUG] start %s task by frigate\n", frigate.ProtectTask.Name)))
+
+		frigate.Log.Stderr.Write(byte[](fmt.Sprintf("%s [DEBUG] start %s task by frigate\n",time.Now().String(), frigate.ProtectTask.Name)))
 		err = frigate.ProtectTask.Start()
 		if err != nil {
 			return err
@@ -98,15 +98,15 @@ func (frigate *Frigate) Start() (err error) {
 			for  e := range frigate.ProtectTask.Done() {
 				// 用户主动关闭进程
 				if e.Error() == CANCEL_PROCESS {
-					frigate.Log.Stderr.Write(byte[](fmt.Sprintf("[WARN] cancel %s task by frigate\n", frigate.ProtectTask.Name)))
+					frigate.Log.Stderr.Write(byte[](fmt.Sprintf("[WARN] %s cancel %s task by frigate\n",time.Now().String(), frigate.ProtectTask.Name)))
 				} else {
 					// case 2： 尝试异常重启
-					if frigate.Strategy.TryRestart(frigate.ProtectTask.StartTime) {
-						frigate.Log.Stderr.Write(byte[](fmt.Sprintf("[ERROR] %s task exit %s, try restart task\n", frigate.ProtectTask.Name, e.Error())))		
+					if frigate.Strategy.tryRestart(time.Now() - frigate.ProtectTask.StartTime) {
+						frigate.Log.Stderr.Write(byte[](fmt.Sprintf("[ERROR] %s %s task exit %s, try restart task\n", time.Now().String(), frigate.ProtectTask.Name, e.Error())))		
 						frigate.Start()
 					} else {
 						// case 3 无法正常启动
-						frigate.Log.Stderr.Write(byte[](fmt.Sprintf("[ERROR] %s task start fail %s, and beyond the max restart times\n", frigate.ProtectTask.Name, e.Error())))
+						frigate.Log.Stderr.Write(byte[](fmt.Sprintf("[ERROR] %s  %s task start fail %s, and beyond the max restart times\n", time.Now().String(), frigate.ProtectTask.Name, e.Error())))
 					}
 				}
 			}
