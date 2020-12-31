@@ -1,9 +1,11 @@
 package frigate
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"os/user"
+	"strconv"
 	"syscall"
 	"time"
 )
@@ -71,6 +73,8 @@ func (s *Strategy) Apply(cmd *exec.Cmd) (err error) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{}
 	cmd.SysProcAttr.Setpgid = true
 	cmd.SysProcAttr.Pgid = pgid
+
+
 	if s.User != nil {
 		// 重新查找正确的用户
 		if s.User.Uid != ""{
@@ -83,10 +87,23 @@ func (s *Strategy) Apply(cmd *exec.Cmd) (err error) {
 			if err != nil {
 				return err
 			}
-		} 
+		} else {
+			// 没有设置用户，默认继承当前用户
+			s.User = currentUser
+		}
 		// todo 如果没有找到用户，且守护进程有root权限，则应创建相关用户
-		
-		cmd.SysProcAttr.Credential = &syscall.Credential{}
+		uid, err := strconv.Atoi(s.User.Uid)
+		if err != nil {
+			return errors.New("find uid error " + err.Error())
+		}
+		gid, err := strconv.Atoi(s.User.Gid)
+		if err != nil {
+			return errors.New("find gid error " + err.Error())
+		}
+		credential := &syscall.Credential{}
+		credential.Uid = uint32(uid)
+		credential.Gid = uint32(gid)
+		cmd.SysProcAttr.Credential = credential
 	
 	}
 }
