@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"io"
 	"os"
 	"os/exec"
 )
@@ -20,8 +21,8 @@ const (
 // Frigate 的日志数据
 type FLogger struct {
 	// 标准输出流日志
-	Stdout *os.File
-	Stderr *os.File
+	Stdout io.Writer
+	Stderr io.Writer
 	// 日志备份数量
 	Backups int
 	// 日志文件大小
