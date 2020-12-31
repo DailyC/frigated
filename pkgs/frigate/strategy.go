@@ -33,7 +33,7 @@ type Strategy struct {
 	AutoStart bool
 	// 程序退出后自动重启,可选值：[unexpected,true,false]，默认为 unexpected
 	AutoRestart bool
-	//启动10秒后没有异常退出，就表示进程正常启动了，默认为1秒
+	//启动10秒后没有异常退出，就表示进程正常启动了，默认为10秒
 	Startsecs time.Duration
 	// 启动失败自动重试次数，默认是3
 	StartRetries int
@@ -60,8 +60,18 @@ const (
 	FALSE = "false"
 )
 
-func defaultStratage() *Strategy {
-
+func defaultStrategy() *Strategy {
+	return &Strategy{
+		true,
+		true,
+		10 * time.Second,
+		3,
+		false,
+		30 * time.Second,
+		false,
+		currentUser,
+		"",
+	}
 }
 
 /**
@@ -74,15 +84,15 @@ func (s *Strategy) Apply(cmd *exec.Cmd) (err error) {
 	cmd.SysProcAttr.Setpgid = true
 	cmd.SysProcAttr.Pgid = pgid
 
-
-	if s.User != nil {
+	// 设置新进程用户
+	if s.User != nil && s.User != currentUser {
 		// 重新查找正确的用户
-		if s.User.Uid != ""{
+		if s.User.Uid != "" {
 			s.User, err = user.LookupId(s.User.Uid)
 			if err != nil {
 				return err
 			}
-		}else if s.User.Name != "" {
+		} else if s.User.Name != "" {
 			s.User, err = user.Lookup(s.User.Name)
 			if err != nil {
 				return err
@@ -104,6 +114,6 @@ func (s *Strategy) Apply(cmd *exec.Cmd) (err error) {
 		credential.Uid = uint32(uid)
 		credential.Gid = uint32(gid)
 		cmd.SysProcAttr.Credential = credential
-	
 	}
+	return nil
 }
