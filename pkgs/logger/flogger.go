@@ -1,6 +1,10 @@
 package logger
 
-import "os"
+import (
+	"io"
+	"os"
+	"os/exec"
+)
 
 //@author Wang Weiwei
 //@since 2020/3/24
@@ -17,8 +21,8 @@ const (
 // Frigate 的日志数据
 type FLogger struct {
 	// 标准输出流日志
-	Stdout *os.File
-	Stderr *os.File
+	Stdout io.Writer
+	Stderr io.Writer
 	// 日志备份数量
 	Backups int
 	// 日志文件大小
@@ -36,4 +40,14 @@ func DefaultLogger() *FLogger {
 		Maxbytes: 0,
 		Redirect: false,
 	}
+}
+
+/**
+ * 应用logger配置，包括重定向输出流及启用文件清理相关功能
+ */
+func (f *FLogger)Apply(cmd *exec.Cmd) error {
+		cmd.Stdin = nil
+		cmd.Stdout = f.Stdout
+		cmd.Stderr = f.Stderr
+		return nil
 }

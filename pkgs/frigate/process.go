@@ -14,6 +14,9 @@ import (
 // 历史注册过的golang函数
 var registeredInitializers = make(map[string]func())
 
+const (
+	CANCEL_PROCESS string = "cancel"
+)
 // 受保护任务定义
 type ProtectTask struct {
 	// the task run in child process
@@ -21,7 +24,11 @@ type ProtectTask struct {
 	Name      string
 	Process   *os.Process
 	StartTime time.Time
+	// 任务相关信号
+	signalChan chan error
 }
+
+
 
 // 注册golang 任务函数，如果不注册golang函数，接下来
 // 在执行golang任务函数之前需要先对任务函数进行注册
@@ -79,12 +86,13 @@ func newExecTask(path string) *ProtectTask {
 			if runtime.GOOS == "windows" {
 				return exec.Command(path)
 			} else {
-				return exec.Command("/bin/sh", "-c", path)
+				return exec.Command(path)
 			}
 		}(),
 		Name:      paths[len(path)-1],
 		Process:   nil,
-		StartTime: nil,
+		StartTime: time.Now(),
+		signalChan: make(chan error, 1),
 	}
 }
 
@@ -97,6 +105,21 @@ func newGolangTask(name string) *ProtectTask {
 		Cmd:       reexec.Command(name),
 		Name:      name,
 		Process:   nil,
-		StartTime: nil,
+		StartTime: time.Now(),
 	}
+}
+
+/**
+ * 获取进程信号通道
+*/
+func (t *ProtectTask) Done() <-chan error{
+	return t.signalChan
+}
+
+
+/**
+ * 启动进程
+*/
+func (t *ProtectTask) Start() (err error) {
+
 }
