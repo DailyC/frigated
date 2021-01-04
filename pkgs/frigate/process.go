@@ -96,7 +96,7 @@ func newExecTask(path string) *ProtectTask {
 				return exec.Command(path)
 			}
 		}(),
-		Name:      paths[len(path)-1],
+		Name:      paths[len(paths)-1],
 		Process:   nil,
 		StartTime: time.Now(),
 		signalChan: make(chan error, 1),
@@ -144,9 +144,17 @@ func (t *ProtectTask) closeSC(f func ()) {
  * 启动进程后，需要主动wait，等待子进程结束，接收SINGCHILD信号，否则子进程可能变成僵尸进程
 */
 func (t *ProtectTask) Start() (err error) {
+	if t.isCloseSC {
+		t.signalChan = make(chan error, 1)
+		t.isCloseSC = false
+	}
 	t.StartTime = time.Now()
 	err = t.Cmd.Start()
+	
 	if err != nil {
+		t.closeSC(func () {
+			t.signalChan <- err
+		})
 		return err
 	}
 	
@@ -194,6 +202,9 @@ func (t *ProtectTask) Stop(d time.Duration) (err error) {
 	}()
 	select {
 	case <- ctx.Done() :{
+		defer func() { 
+			t.Process = nil
+		}()
 		// 超时 或 关闭出错，都尝试kill
 		if ctx.Err() != nil || err != nil {
 			err = t.Process.Kill()
