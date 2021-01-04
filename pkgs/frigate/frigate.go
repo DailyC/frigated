@@ -1,9 +1,10 @@
 package frigate
 
 import (
-	"context"
 	"errors"
+	"fmt"
 	"os/exec"
+	"time"
 
 	"github.com/frigated/pkgs/cgroup"
 	"github.com/frigated/pkgs/logger"
@@ -12,7 +13,7 @@ import (
 //@author Wang Weiwei
 //@since 2020/3/24
 
-// 创建守护的任务进程
+// Create 创建守护的任务进程
 //
 // 1. 如果要以golang的函数作为子进程:
 // name 代表 frigate 守护进程的标识，frigate 将使用这个名字创建子进程
@@ -54,14 +55,17 @@ type ApplyConfig interface {
 	Apply(cmd *exec.Cmd) error
 }
 
-/**
- * 可运行的任务接口
+// Runable 可运行程序接口
+/*  可运行的任务接口
 */
 type Runable interface{
+	// 启动
 	Start() (err error);
-	Cancel() (err error);
+	// 停止
+	Stop(d time.Duration) (err error);
 }
 
+// Apply 应用配置
 /**
  * 应用子进程配置
  */
@@ -77,7 +81,7 @@ func (frigate *Frigate) Apply(cmd *exec.Cmd) (err error) {
 	return nil
 }
 
-// 启动守护进程
+// Start 启动守护进程
 // 启动守护进程时会使用守护策略参数
 func (frigate *Frigate) Start() (err error) {
 	if frigate.ProtectTask != nil && frigate.ProtectTask.Cmd != nil {
@@ -86,7 +90,7 @@ func (frigate *Frigate) Start() (err error) {
 			 return err
 		 }
 
-		frigate.Log.Stderr.Write(byte[](fmt.Sprintf("%s [DEBUG] start %s task by frigate\n",time.Now().String(), frigate.ProtectTask.Name)))
+		frigate.Log.Stderr.Write([]byte(fmt.Sprintf("%s [DEBUG] start %s task by frigate\n",time.Now().String(), frigate.ProtectTask.Name)))
 		err = frigate.ProtectTask.Start()
 		if err != nil {
 			return err
@@ -98,24 +102,29 @@ func (frigate *Frigate) Start() (err error) {
 			for  e := range frigate.ProtectTask.Done() {
 				// 用户主动关闭进程
 				if e.Error() == CANCEL_PROCESS {
-					frigate.Log.Stderr.Write(byte[](fmt.Sprintf("[WARN] %s cancel %s task by frigate\n",time.Now().String(), frigate.ProtectTask.Name)))
+					frigate.Log.Stderr.Write([]byte(fmt.Sprintf("[WARN] %s cancel %s task by frigate\n",time.Now().String(), frigate.ProtectTask.Name)))
 				} else {
 					// case 2： 尝试异常重启
-					if frigate.Strategy.tryRestart(time.Now() - frigate.ProtectTask.StartTime) {
-						frigate.Log.Stderr.Write(byte[](fmt.Sprintf("[ERROR] %s %s task exit %s, try restart task\n", time.Now().String(), frigate.ProtectTask.Name, e.Error())))		
+					if frigate.Strategy.tryRestart(frigate.ProtectTask.StartTime.Sub(time.Now())) {
+						frigate.Log.Stderr.Write([]byte(fmt.Sprintf("[ERROR] %s %s task exit %s, try restart task\n", time.Now().String(), frigate.ProtectTask.Name, e.Error())))		
 						frigate.Start()
 					} else {
 						// case 3 无法正常启动
-						frigate.Log.Stderr.Write(byte[](fmt.Sprintf("[ERROR] %s  %s task start fail %s, and beyond the max restart times\n", time.Now().String(), frigate.ProtectTask.Name, e.Error())))
+						frigate.Log.Stderr.Write([]byte(fmt.Sprintf("[ERROR] %s  %s task start fail %s, and beyond the max restart times\n", time.Now().String(), frigate.ProtectTask.Name, e.Error())))
 					}
 				}
 			}
-		 }
-
-		 
+		 }()
 
 	} else {
 		// no args
 		return errors.New("no init command")
 	}
+	return nil
+}
+
+
+// Stop 用户主动调用，关闭守护进程逻辑
+func (frigate *Frigate) Stop(d time.Duration) (err error) {
+	return frigate.ProtectTask.Stop(frigate.Strategy.GraceCloseWait)
 }
