@@ -31,13 +31,14 @@ func init() {
 type Strategy struct {
 	//在 Frigated 启动的时候也自动启动
 	AutoStart bool
-	// 程序退出后自动重启,可选值：[unexpected,true,false]，默认为 unexpected
+	// 程序退出后自动重启,可选值：[true,false]，默认为 true
 	AutoRestart bool
-	//启动10秒后没有异常退出，就表示进程正常启动了，默认为10秒
+	//启动n秒后没有异常退出，就表示进程正常启动了，默认为10秒
+	// 如果这个值为0，则没有启动失败的概念，即只要发现进程未在运行，就触发重启
 	Startsecs time.Duration
 	// 启动失败自动重试次数，默认是3
 	StartRetries int
-	// 启动进程前，是否尝试关闭同名其它进程
+	// todo 启动进程前，是否尝试关闭同名其它进程
 	GraceClose bool
 	// 关闭同名进程最大等待时间
 	GraceCloseWait time.Duration
@@ -116,4 +117,21 @@ func (s *Strategy) Apply(cmd *exec.Cmd) (err error) {
 		cmd.SysProcAttr.Credential = credential
 	}
 	return nil
+}
+
+/**
+ * tryRestart 测试策略性的重启
+ * 如程序异常结束，则应允许应用重启
+ * 而当应用连续尝试启动失败后，不应该一直重启，因为这会造成一直浪费资源，且无法正常启动
+ */
+func (s *Strategy) tryRestart(t time.Duration) bool {
+	if s.Startsecs != 0 && s.Startsecs > t {
+		if s.StartRetries > 0 {
+			s.StartRetries--
+			return true
+		} else {
+			return false
+		}
+	}
+	return s.AutoRestart
 }

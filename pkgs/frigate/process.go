@@ -1,12 +1,16 @@
 package frigate
 
 import (
-	"github.com/docker/docker/pkg/reexec"
+	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
+
+	"github.com/docker/docker/pkg/reexec"
 )
 
 //@author Wang Weiwei
@@ -16,6 +20,7 @@ var registeredInitializers = make(map[string]func())
 
 const (
 	CANCEL_PROCESS string = "cancel"
+	COMPLETE_PROCESS string = "complete"
 )
 // 受保护任务定义
 type ProtectTask struct {
@@ -24,8 +29,10 @@ type ProtectTask struct {
 	Name      string
 	Process   *os.Process
 	StartTime time.Time
-	// 任务相关信号
+	// 任务相关信号管道
 	signalChan chan error
+	// 信号管道是否被正常关闭
+	isCloseSC bool
 }
 
 
@@ -93,6 +100,7 @@ func newExecTask(path string) *ProtectTask {
 		Process:   nil,
 		StartTime: time.Now(),
 		signalChan: make(chan error, 1),
+		isCloseSC: false,
 	}
 }
 
@@ -106,6 +114,8 @@ func newGolangTask(name string) *ProtectTask {
 		Name:      name,
 		Process:   nil,
 		StartTime: time.Now(),
+		signalChan: make(chan error, 1),
+		isCloseSC: false,
 	}
 }
 
@@ -118,8 +128,78 @@ func (t *ProtectTask) Done() <-chan error{
 
 
 /**
- * 启动进程
+ * close the channel od signal
+*/
+func (t *ProtectTask) closeSC(f func ()) {
+	if !t.isCloseSC {
+		f()
+		close(t.signalChan)
+		t.isCloseSC = true
+	}
+}
+
+// Start
+/**
+ *  启动进程
+ * 启动进程后，需要主动wait，等待子进程结束，接收SINGCHILD信号，否则子进程可能变成僵尸进程
 */
 func (t *ProtectTask) Start() (err error) {
+	t.StartTime = time.Now()
+	err = t.Cmd.Start()
+	if err != nil {
+		return err
+	}
+	
+	t.Process = t.Cmd.Process
+	go func() {
+		err = t.Cmd.Wait()
+		t.closeSC(func () {
+			if err == nil {
+				t.signalChan <- errors.New(COMPLETE_PROCESS)
+			}else {
+				t.signalChan <- err
+			}
+		})
+	}()
+	return nil
+}
 
+
+// Stop 用户主动关闭进程
+//
+// 优先使用 SIGTERM 信号量优雅关闭进程
+// 如果超时后还未能正常关闭进程，则使用 kill 信号强行关闭进程
+// d 关闭进程最大等大时间
+func (t *ProtectTask) Stop(d time.Duration) (err error) {
+	t.closeSC(func () {
+		t.signalChan <- errors.New(CANCEL_PROCESS)
+	})
+	err = t.Process.Signal(syscall.SIGTERM)
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(d))
+	go func() {
+		// 信号发送失败也会触发kill
+		if err != nil {
+			cancel()
+			return
+		}
+		states, err1 := t.Process.Wait()
+		if err1 != nil {
+			err = err1
+			cancel()
+			return
+		}
+		if states.Exited() {
+			cancel()
+		}
+	}()
+	select {
+	case <- ctx.Done() :{
+		// 超时 或 关闭出错，都尝试kill
+		if ctx.Err() != nil || err != nil {
+			err = t.Process.Kill()
+			return err	
+		}
+	}
+	}
+	return err
 }
