@@ -83,6 +83,7 @@ func (frigate *Frigate) Apply(cmd *exec.Cmd) (err error) {
 
 // Start 启动守护进程
 // 启动守护进程时会使用守护策略参数
+// 启动进程后，会监听进程状态
 func (frigate *Frigate) Start() (err error) {
 	if frigate.ProtectTask != nil && frigate.ProtectTask.Cmd != nil {
 		 err = frigate.Apply(frigate.ProtectTask.Cmd)
