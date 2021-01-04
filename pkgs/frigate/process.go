@@ -177,6 +177,11 @@ func (t *ProtectTask) Stop(d time.Duration) (err error) {
 	err = t.Process.Signal(syscall.SIGTERM)
 	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(d))
 	go func() {
+		// 信号发送失败也会触发kill
+		if err != nil {
+			cancel()
+			return
+		}
 		states, err1 := t.Process.Wait()
 		if err1 != nil {
 			err = err1
@@ -185,7 +190,6 @@ func (t *ProtectTask) Stop(d time.Duration) (err error) {
 		}
 		if states.Exited() {
 			cancel()
-			
 		}
 	}()
 	select {
