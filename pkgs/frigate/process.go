@@ -9,6 +9,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	// "unsafe"
 
 	"github.com/docker/docker/pkg/reexec"
 )
@@ -19,9 +20,10 @@ import (
 var registeredInitializers = make(map[string]func())
 
 const (
-	CANCEL_PROCESS string = "cancel"
+	CANCEL_PROCESS   string = "cancel"
 	COMPLETE_PROCESS string = "complete"
 )
+
 // 受保护任务定义
 type ProtectTask struct {
 	// the task run in child process
@@ -34,8 +36,6 @@ type ProtectTask struct {
 	// 信号管道是否被正常关闭
 	isCloseSC bool
 }
-
-
 
 // 注册golang 任务函数，如果不注册golang函数，接下来
 // 在执行golang任务函数之前需要先对任务函数进行注册
@@ -96,11 +96,11 @@ func newExecTask(path string) *ProtectTask {
 				return exec.Command(path)
 			}
 		}(),
-		Name:      paths[len(path)-1],
-		Process:   nil,
-		StartTime: time.Now(),
+		Name:       paths[len(paths)-1],
+		Process:    nil,
+		StartTime:  time.Now(),
 		signalChan: make(chan error, 1),
-		isCloseSC: false,
+		isCloseSC:  false,
 	}
 }
 
@@ -110,27 +110,26 @@ func newExecTask(path string) *ProtectTask {
 // 注意函数执行完成要使子进程自动退出
 func newGolangTask(name string) *ProtectTask {
 	return &ProtectTask{
-		Cmd:       reexec.Command(name),
-		Name:      name,
-		Process:   nil,
-		StartTime: time.Now(),
+		Cmd:        reexec.Command(name),
+		Name:       name,
+		Process:    nil,
+		StartTime:  time.Now(),
 		signalChan: make(chan error, 1),
-		isCloseSC: false,
+		isCloseSC:  false,
 	}
 }
 
 /**
  * 获取进程信号通道
-*/
-func (t *ProtectTask) Done() <-chan error{
+ */
+func (t *ProtectTask) Done() <-chan error {
 	return t.signalChan
 }
 
-
 /**
  * close the channel od signal
-*/
-func (t *ProtectTask) closeSC(f func ()) {
+ */
+func (t *ProtectTask) closeSC(f func()) {
 	if !t.isCloseSC {
 		f()
 		close(t.signalChan)
@@ -142,21 +141,25 @@ func (t *ProtectTask) closeSC(f func ()) {
 /**
  *  启动进程
  * 启动进程后，需要主动wait，等待子进程结束，接收SINGCHILD信号，否则子进程可能变成僵尸进程
-*/
+ */
 func (t *ProtectTask) Start() (err error) {
-	t.StartTime = time.Now()
+	t.reInitCmd()
 	err = t.Cmd.Start()
+
 	if err != nil {
+		t.closeSC(func() {
+			t.signalChan <- err
+		})
 		return err
 	}
-	
+
 	t.Process = t.Cmd.Process
 	go func() {
 		err = t.Cmd.Wait()
-		t.closeSC(func () {
+		t.closeSC(func() {
 			if err == nil {
 				t.signalChan <- errors.New(COMPLETE_PROCESS)
-			}else {
+			} else {
 				t.signalChan <- err
 			}
 		})
@@ -164,6 +167,36 @@ func (t *ProtectTask) Start() (err error) {
 	return nil
 }
 
+// reInitCmd 重新初始化命令
+// 重新初始化命令即拷贝源命令的配置，重新启动命令
+// 重新初始化的条件是信号管道已被关闭
+// 该方法调用会重置进程启动时间
+// 注意这个方法是不安全的，需要通过unsafe修改 os.Cmd 结构体中的私有变量，是否还会造成其它异常结果，还有待确认
+func (t *ProtectTask) reInitCmd() {
+	if t.isCloseSC {
+		oldCmd := t.Cmd
+		newCmd := exec.Command(oldCmd.Path)
+		// warning please copy value of args，don't use construct function  
+		newCmd.Args = oldCmd.Args
+		newCmd.Env = oldCmd.Env
+		// newCmd.Dir = oldCmd.Dir
+		// newCmd.ExtraFiles = oldCmd.ExtraFiles
+		newCmd.Stderr = oldCmd.Stderr
+		newCmd.Stdout = oldCmd.Stdout
+		newCmd.Stdin = oldCmd.Stdin
+		newCmd.SysProcAttr = oldCmd.SysProcAttr
+		t.Cmd = newCmd
+
+		t.Cmd.Process = nil
+
+		t.signalChan = make(chan error, 1)
+		t.isCloseSC = false
+		
+	}
+
+	t.Process = nil
+	t.StartTime = time.Now()
+}
 
 // Stop 用户主动关闭进程
 //
@@ -171,7 +204,7 @@ func (t *ProtectTask) Start() (err error) {
 // 如果超时后还未能正常关闭进程，则使用 kill 信号强行关闭进程
 // d 关闭进程最大等大时间
 func (t *ProtectTask) Stop(d time.Duration) (err error) {
-	t.closeSC(func () {
+	t.closeSC(func() {
 		t.signalChan <- errors.New(CANCEL_PROCESS)
 	})
 	err = t.Process.Signal(syscall.SIGTERM)
@@ -193,13 +226,17 @@ func (t *ProtectTask) Stop(d time.Duration) (err error) {
 		}
 	}()
 	select {
-	case <- ctx.Done() :{
-		// 超时 或 关闭出错，都尝试kill
-		if ctx.Err() != nil || err != nil {
-			err = t.Process.Kill()
-			return err	
+	case <-ctx.Done():
+		{
+			defer func() {
+				t.Process = nil
+			}()
+			// 超时 或 关闭出错，都尝试kill
+			if ctx.Err() != nil || err != nil {
+				err = t.Process.Kill()
+				return err
+			}
 		}
-	}
 	}
 	return err
 }
