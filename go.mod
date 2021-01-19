@@ -1,4 +1,4 @@
-module github.com/frigated
+module github.com/DailyC/frigated
 
 go 1.14
 

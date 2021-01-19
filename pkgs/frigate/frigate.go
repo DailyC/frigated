@@ -6,8 +6,8 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/frigated/pkgs/cgroup"
-	"github.com/frigated/pkgs/logger"
+	"github.com/DailyC/frigated/pkgs/cgroup"
+	"github.com/DailyC/frigated/pkgs/logger"
 )
 
 //@author Wang Weiwei
